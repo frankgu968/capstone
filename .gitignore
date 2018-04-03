@@ -1,0 +1,7 @@
+# Jupyter notebook caches
+__pycache__/
+*.pyc
+utils/__pycache__/
+.ipynb_checkpoints/
+*.bak
+_*.*
