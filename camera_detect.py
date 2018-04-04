@@ -40,7 +40,7 @@ Z_TOLERANCE = 1.
 Y_TOLERANCE = 5.
 DIST_THRESHOLD = 125.
 ASPECT_RATIO = CHARGER_HEIGHT / CHARGER_WIDTH
-AR_THRESHOLD = 0.07 # Triggers aspect ratio correction at 5% deviation
+AR_THRESHOLD = 0.25 # Triggers aspect ratio correction at 5% deviation
 
 def load_graph():
     # Load frozen inference graph

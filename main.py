@@ -272,12 +272,12 @@ def on_step():
         state['cmdResponse'] = execute_cmd(cmd, serial, devMode)
 
         # Charger engagement
-        # retStr = 'Engaging charger...\n'
-        # state['response'] += retStr
-        # cmd = generate_move(0, 68, 0)
-        # state['cmdStr'] = str(cmd)
-        # socketio.emit('state', state)
-        # state['cmdResponse'] = execute_cmd(cmd, serial, devMode)
+        retStr = 'Engaging charger...\n'
+        state['response'] += retStr
+        cmd = generate_move(0, 69, 0)
+        state['cmdStr'] = str(cmd)
+        socketio.emit('state', state)
+        state['cmdResponse'] = execute_cmd(cmd, serial, devMode)
 
         retStr = 'Charger engaged!\n'
         state['response'] += retStr
