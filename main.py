@@ -44,6 +44,7 @@ def gen():
         cv2.line(image, (0, int(HEIGHT/2)), (int(WIDTH), int(HEIGHT/2)), (0,255,0), 2)
         cv2.line(image, (int(WIDTH/2), 0), (int(WIDTH/2), int(HEIGHT)), (0,255,0), 2)
         ret, jpeg = cv2.imencode('.jpg', image)
+        time.sleep(0.05)
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
 
