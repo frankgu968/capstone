@@ -52,6 +52,49 @@ def controls():
     """ Control Page"""
     return render_template('control.html')
 
+@app.route('/test')
+def test():
+    print("hit!")
+    return 'hit!'
+
+@app.route('/charge_on')
+def charge_on():
+    global state
+    retStr = 'Charging begins!'
+    print(retStr)
+    state['response'] += retStr
+    socketio.emit('state', state)
+
+@app.route('/charge_off')
+def charge_off():
+    global state
+    retStr = 'Charging completed!'
+    print(retStr)
+    state['response'] += retStr
+    socketio.emit('state', state)
+
+    cmd = generate_reset()
+    state['cmdStr'] = str(cmd)
+    socketio.emit('state', state)
+    state['cmdResponse'] = execute_cmd(cmd, serial, devMode)
+
+    # State transition
+    if(state['cmdResponse'] == 1):
+        state['status'] = -1
+        state['response'] = ''
+        state['cmdResponse'] = 0
+        state['disableReset'] = False
+        state['runMode'] = 0
+        state['aligned'] = False
+        state['engaged'] = False
+        state['firstRun'] = True
+    else:
+        state['status'] = 2
+        state['disableReset'] = True
+        state['response'] += 'ERROR: Reset failed!\n'
+
+    socketio.emit('state', state)
+
 @app.route('/video_feed')
 def video_feed():
     """Video streaming route. Put this in the src attribute of an img tag."""
@@ -161,7 +204,7 @@ def on_step():
             state['response'] += retStr
             state['cmdResponse'] = -1
             state['status'] = 2
-            socketio.emit('State', state)
+            socketio.emit('state', state)
             return
 
         if result[0] > MAX_DISTANCE:
@@ -179,6 +222,15 @@ def on_step():
 
         if (result[1] == 0.) and (result[2] == 0.) and (result[3] == 0.):
             state['aligned'] = True
+            if not result[4]:
+                retStr = 'ERROR: Exceeded allowable angular misalignment\n'
+                print(retStr)
+                state['status'] = 2
+                state['response'] += retStr
+                state['cmdResponse'] = 1
+                socketio.emit('state', state)
+                return
+
             retStr = 'Ready to engage\n'
             print(retStr)
             state['cmdResponse'] = 1
@@ -220,12 +272,12 @@ def on_step():
         state['cmdResponse'] = execute_cmd(cmd, serial, devMode)
 
         # Charger engagement
-        retStr = 'Engaging charger...\n'
-        state['response'] += retStr
-        cmd = generate_move(0, 68, 0)
-        state['cmdStr'] = str(cmd)
-        socketio.emit('state', state)
-        state['cmdResponse'] = execute_cmd(cmd, serial, devMode)
+        # retStr = 'Engaging charger...\n'
+        # state['response'] += retStr
+        # cmd = generate_move(0, 68, 0)
+        # state['cmdStr'] = str(cmd)
+        # socketio.emit('state', state)
+        # state['cmdResponse'] = execute_cmd(cmd, serial, devMode)
 
         retStr = 'Charger engaged!\n'
         state['response'] += retStr

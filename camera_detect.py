@@ -40,7 +40,7 @@ Z_TOLERANCE = 1.
 Y_TOLERANCE = 5.
 DIST_THRESHOLD = 125.
 ASPECT_RATIO = CHARGER_HEIGHT / CHARGER_WIDTH
-AR_THRESHOLD = 0.25 # Triggers aspect ratio correction at 10% deviation
+AR_THRESHOLD = 0.07 # Triggers aspect ratio correction at 5% deviation
 
 def load_graph():
     # Load frozen inference graph
@@ -138,7 +138,7 @@ def run_detect(cap, sess, avg_filter):
         # num_detections = detection_graph.get_tensor_by_name('num_detections:0')
 
         # cv2.VideoCapture has 5 frame buffer; clear this to get the most recent frame!
-        for i in range(5):
+        for j in range(5):
             cap.grab()
 
         # Grab a single frame from camera
@@ -157,7 +157,7 @@ def run_detect(cap, sess, avg_filter):
         center, size, ar_correct = get_loc_and_size(boxes, scores, WIDTH, HEIGHT)
         # Visualization of the results of a detection.
         if size > 0:
-            if i == (avg_filter-1):
+            if i == (avg_filter):
                 cv2.line(imageArr, (0, int(center[1])), (WIDTH, int(center[1])), (0,255,0), 2)
                 cv2.line(imageArr, (int(center[0]), 0), (int(center[0]), HEIGHT), (0,255,0), 2)
                 cv2.imwrite('./img/current.jpg' , cv2.cvtColor(imageArr, cv2.COLOR_RGB2BGR))
@@ -187,4 +187,4 @@ def run_detect(cap, sess, avg_filter):
         z_corr = 0.0
         y_corr = 0.0
 
-    return [dist, x_corr, z_corr, y_corr, imageArr]
+    return [dist, x_corr, z_corr, y_corr, ar_correct]
