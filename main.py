@@ -12,6 +12,7 @@ from motion import *
 app = Flask(__name__)
 socketio = SocketIO(app)
 serial = []
+cap = []
 devMode = False
 state = {
     'runMode': 0,
@@ -37,10 +38,12 @@ FILTER_NUM = 1
 
 def gen():
     """Video streaming generator function."""
+    global cap
     while True:
+        success, image = cap.read()
+        ret, jpeg = cv2.imencode('.jpg', image)
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + open('./img/current.jpg', 'rb').read() + b'\r\n')
-        time.sleep(0.5)
+               b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
 
 @app.route('/')
 def view():
