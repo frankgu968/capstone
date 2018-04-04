@@ -1,6 +1,7 @@
 from camera_detect import run_detect, load_graph, get_error_str
 import cv2
 import io
+import time
 import numpy as np
 import tensorflow as tf
 from flask import Flask, render_template, Response
@@ -22,18 +23,24 @@ state = {
     'cmdResponse': '',
     'aligned' : False,
     'engaged' : False,
-    'disableReset' : False
+    'disableReset' : False,
+    'firstRun': True
 }
 
 # Calibrations
 Z_OFFSET = -42.
 X_OFFSET = 0.
+MAX_DISTANCE = 300.
+
+# Filter samples
+FILTER_NUM = 1
 
 def gen():
     """Video streaming generator function."""
     while True:
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + open('./img/current.jpg', 'rb').read() + b'\r\n')
+        time.sleep(0.5)
 
 @app.route('/')
 def view():
@@ -93,6 +100,7 @@ def on_reset():
         state['runMode'] = 0
         state['aligned'] = False
         state['engaged'] = False
+        state['firstRun'] = True
     else:
         state['status'] = 2
         state['disableReset'] = True
@@ -120,7 +128,7 @@ def on_step():
     global state
     global serial
 
-    while not state['aligned']:
+    while (not state['aligned']) and (state['status'] != 2):
         # Manual mode break condition
         if (state['runMode'] == 1) and state['aligned']:
             break
@@ -136,9 +144,14 @@ def on_step():
             state['response'] += 'ERROR: LED toggled failure!\n'
         socketio.emit('state', state)
 
+        # Wait for camera to adjust
+        if(state['firstRun']):
+            time.sleep(0.5)
+            state['firstRun'] = False
+
         # Run detection algorithm
         if not devMode:
-            result = run_detect(cap, sess, 10)   # 7 samples
+            result = run_detect(cap, sess, FILTER_NUM)   # 7 samples
         else:
             result = [1, 1., -1.,1.]
         if result[0] < 0:
@@ -149,6 +162,14 @@ def on_step():
             state['cmdResponse'] = -1
             state['status'] = 2
             socketio.emit('State', state)
+            return
+
+        if result[0] > MAX_DISTANCE:
+            retStr = 'ERROR: Charging port out of range'
+            print(retStr)
+            state['response'] += retStr
+            state['status'] = 2
+            socketio.emit('state', state)
             return
 
         # Append to log and send
@@ -201,7 +222,7 @@ def on_step():
         # Charger engagement
         retStr = 'Engaging charger...\n'
         state['response'] += retStr
-        cmd = generate_move(0, 67, 0)
+        cmd = generate_move(0, 68, 0)
         state['cmdStr'] = str(cmd)
         socketio.emit('state', state)
         state['cmdResponse'] = execute_cmd(cmd, serial, devMode)

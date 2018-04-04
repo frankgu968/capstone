@@ -40,11 +40,10 @@ def execute_cmd(cmdStr, ser, devMode):
 
     ser.write(cmdStr)
 
-    for i in range(25):
+    for i in range(1000):
         try:
-            time.sleep(0.01)
             result = ser.readline()
-            # print(result)
+            print(i)
             if result == b'{CPT}\n':
                 return 1
             elif result == b'{ERR}\n':

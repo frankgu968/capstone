@@ -32,7 +32,7 @@ CHARGER_HEIGHT = 95.5
 FOCAL_DISTANCE = 533. # Units in pixels
 
 # Only give trigger when confidence is over 90%
-DETECTION_THRESHOLD = 0.95;
+DETECTION_THRESHOLD = 0.9;
 
 # End conditions for tracking loop (tolerances in mm)
 X_TOLERANCE = 1.
