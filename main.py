@@ -1,4 +1,4 @@
-from camera_detect import run_detect, load_graph, get_error_str
+from camera_detect import *
 import cv2
 import io
 import time
@@ -41,6 +41,8 @@ def gen():
     global cap
     while True:
         success, image = cap.read()
+        cv2.line(image, (0, int(HEIGHT/2)), (int(WIDTH), int(HEIGHT/2)), (0,255,0), 2)
+        cv2.line(image, (int(WIDTH/2), 0), (int(WIDTH/2), int(HEIGHT)), (0,255,0), 2)
         ret, jpeg = cv2.imencode('.jpg', image)
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')

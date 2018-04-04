@@ -157,10 +157,9 @@ def run_detect(cap, sess, avg_filter):
         center, size, ar_correct = get_loc_and_size(boxes, scores, WIDTH, HEIGHT)
         # Visualization of the results of a detection.
         if size > 0:
-            if i == (avg_filter):
-                cv2.line(imageArr, (0, int(center[1])), (WIDTH, int(center[1])), (0,255,0), 2)
-                cv2.line(imageArr, (int(center[0]), 0), (int(center[0]), HEIGHT), (0,255,0), 2)
-                cv2.imwrite('./img/current.jpg' , cv2.cvtColor(imageArr, cv2.COLOR_RGB2BGR))
+            cv2.line(imageArr, (0, int(center[1])), (WIDTH, int(center[1])), (0,255,0), 2)
+            cv2.line(imageArr, (int(center[0]), 0), (int(center[0]), HEIGHT), (0,255,0), 2)
+            cv2.imwrite('./img/current.jpg' , cv2.cvtColor(imageArr, cv2.COLOR_RGB2BGR))
 
             if(ar_correct):
                 # Aspect ratio is correct, charger fully in sight
