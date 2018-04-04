@@ -30,7 +30,7 @@ state = {
 # Calibrations
 Z_OFFSET = -42.
 X_OFFSET = 0.
-MAX_DISTANCE = 300.
+MAX_DISTANCE = 350.
 
 # Filter samples
 FILTER_NUM = 1
