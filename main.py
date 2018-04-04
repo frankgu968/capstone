@@ -1,4 +1,4 @@
-from camera_detect import run_detect, load_graph
+from camera_detect import run_detect, load_graph, get_error_str
 import cv2
 import io
 import numpy as np
@@ -8,13 +8,26 @@ from flask_socketio import SocketIO
 from PIL import Image
 from motion import *
 
-text = ''
-auto = False
 app = Flask(__name__)
 socketio = SocketIO(app)
 serial = []
-aligned = False
-engaged = False
+devMode = False
+state = {
+    'runMode': 0,
+    'status': -1,
+    'log': '',
+    'endpoint': 'http://192.168.3.1/',
+    'cmdStr': '',
+    'response': '',
+    'cmdResponse': '',
+    'aligned' : False,
+    'engaged' : False,
+    'disableReset' : False
+}
+
+# Calibrations
+Z_OFFSET = -42.
+X_OFFSET = 0.
 
 def gen():
     """Video streaming generator function."""
@@ -23,9 +36,14 @@ def gen():
                b'Content-Type: image/jpeg\r\n\r\n' + open('./img/current.jpg', 'rb').read() + b'\r\n')
 
 @app.route('/')
-def index():
-    """Video streaming ."""
-    return render_template('index.html')
+def view():
+    """ View only page """
+    return render_template('view.html')
+
+@app.route('/controls')
+def controls():
+    """ Control Page"""
+    return render_template('control.html')
 
 @app.route('/video_feed')
 def video_feed():
@@ -34,11 +52,12 @@ def video_feed():
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 def run_server():
-    socketio.run(app, host='172.16.3.25', port=80)
+    socketio.run(app, host='192.168.3.1', port=80)
 
 @socketio.on('connect')
 def on_connect():
-    socketio.emit('serialData', text)
+    global state
+    socketio.emit('state', state)
     print('Client connected!')
 
 @socketio.on('disconnect')
@@ -49,119 +68,173 @@ def on_disconnect():
 def on_reset():
     print('Reset triggered!')
     global serial
-    global auto
-    global engaged
-    global aligned
-    global text
-    cmdStr = generate_reset()
-    socketio.emit('cmdData', str(cmdStr))
-    result = execute_cmd(cmdStr, serial)
-    socketio.emit('resetDone', result)
-    auto = False
-    aligned = False
-    engaged = False
-    text = ''
+    global state
+
+    cmd = generate_LED(False)
+    state['cmdStr'] = str(cmd)
+    socketio.emit('state', state)
+    state['cmdResponse'] = execute_cmd(cmd, serial, devMode)
+    if(state['cmdResponse'] != 1):
+        state['status'] = 2
+        state['disableReset'] = True
+        state['response'] += 'ERROR: LED Failed to turn OFF!\n'
+
+    cmd = generate_reset()
+    state['cmdStr'] = str(cmd)
+    socketio.emit('state', state)
+    state['cmdResponse'] = execute_cmd(cmd, serial, devMode)
+
+    # State transition
+    if(state['cmdResponse'] == 1):
+        state['status'] = -1
+        state['response'] = ''
+        state['cmdResponse'] = 0
+        state['disableReset'] = False
+        state['runMode'] = 0
+        state['aligned'] = False
+        state['engaged'] = False
+    else:
+        state['status'] = 2
+        state['disableReset'] = True
+        state['response'] += 'ERROR: Reset failed!\n'
+
+    socketio.emit('state', state)
 
 @socketio.on('mode')
 def on_mode(data):
-    global text
-    global auto
+    global state
     retStr = 'Set mode: '
     if data == 0:
-        auto = True
-        retStr += 'auto'
+        state['runMode'] = 0
+        retStr += 'auto mode'
 
     elif data == 1:
-        auto = False
-        retStr += 'stepped'
-    text += retStr  + '\n'
+        state['runMode'] = 1
+        retStr += 'stepped mode'
+    state['response'] += retStr  + '\n'
     print(retStr)
-    socketio.emit('serialData', text)
+    socketio.emit('state', state)
 
 @socketio.on('step')
 def on_step():
-    global text
-    global imgByteArr
+    global state
     global serial
-    global aligned
 
-    while not aligned:
+    while not state['aligned']:
         # Manual mode break condition
-        if (not auto) and aligned:
+        if (state['runMode'] == 1) and state['aligned']:
             break
 
         # Turn on LED
-        cmdStr = generate_LED(True)
-        socketio.emit('cmdData', str(cmdStr))
-        result = execute_cmd(cmdStr, serial)
-        socketio.emit('stepDone', result)
+        cmd = generate_LED(True)
+        state['cmdStr'] = str(cmd)
+        state['status'] = 1
+        socketio.emit('state', state)
+        state['cmdResponse'] = execute_cmd(cmd, serial, devMode)
+        if state['cmdResponse'] != 1:
+            state['status'] = 2
+            state['response'] += 'ERROR: LED toggled failure!\n'
+        socketio.emit('state', state)
 
         # Run detection algorithm
-        result = run_detect(cap, sess, 5)   # 5 samples
+        if not devMode:
+            result = run_detect(cap, sess, 10)   # 7 samples
+        else:
+            result = [1, 1., -1.,1.]
         if result[0] < 0:
-            retStr = 'ERROR: Execution failed [' + str(result) + ']'
+            retStr = 'ERROR: Execution failed [' + str(result) + ']\n'
+            retStr += get_error_str(result[0])
             print(retStr)
-            socketio.emit('serialData', retStr)
-            socketio.emit('stepDone', -1)
+            state['response'] += retStr
+            state['cmdResponse'] = -1
+            state['status'] = 2
+            socketio.emit('State', state)
             return
 
-        # Save the current image
-        # currentImage = Image.fromarray(result[3])
-        # imgByteArr = io.BytesIO()
-        # currentImage.save(imgByteArr, format='JPEG')
-
         # Append to log and send
-        line = "Estimated Distance: " + str(result[0]) + " | X Correction: " + str(result[1]) + " | Z Correction: " + str(result[2]) + " | Y Correction: " + str(result[3])
-        text += line  + '\n'
-        socketio.emit('serialData', text)
-        print('Sent: ' + line)
+        line = "Estimated Distance: " + "{:4.1f}".format(result[0]) + " (mm) | X Correction: " + "{:4.1f}".format(result[1]) + " (mm) | Z Correction: " +  "{:4.1f}".format(result[2]) + " (mm) | Y Correction: " + "{:4.1f}".format(result[3]) + ' (mm)\n'
+        state['response'] += line
+        socketio.emit('state', state)
 
         if (result[1] == 0.) and (result[2] == 0.) and (result[3] == 0.):
-            aligned = True
-            retStr = 'Ready to engage'
+            state['aligned'] = True
+            retStr = 'Ready to engage\n'
             print(retStr)
-            text += retStr  + '\n'
-            socketio.emit('stepDone', 1)
-            socketio.emit('serialData', text)
-            if not auto:
+            state['cmdResponse'] = 1
+            state['status'] = 0
+            state['response'] += retStr
+            socketio.emit('state', state)
+            if state['runMode'] == 1:
                 return
 
         else:
-            cmdStr = generate_move(result[1], result[3], result[2])
-            socketio.emit('cmdData', str(cmdStr))
-            result = execute_cmd(cmdStr, serial)
-            socketio.emit('stepDone', result)
-            if not auto:
+            cmd = generate_move(result[1], result[3], result[2])
+            state['cmdStr'] = str(cmd)
+            socketio.emit('state', state)
+            state['cmdResponse'] = execute_cmd(cmd, serial, devMode)
+            if(state['cmdResponse'] == 1):
+                state['status'] = 0
+            else:
+                state['status'] = 2
+            socketio.emit('state', state)
+            if state['runMode'] == 1:
                 break
 
-    if(aligned):
+    if(state['aligned']):
         # Turn off the LED
-        cmdStr = generate_LED(True)
-        socketio.emit('cmdData', str(cmdStr))
-        result = execute_cmd(cmdStr, serial)
+        cmd = generate_LED(False)
+        state['cmdStr'] = str(cmd)
+        socketio.emit('state', state)
+        state['cmdResponse'] = execute_cmd(cmd, serial, devMode)
+        if(state['cmdResponse'] == 1):
+            state['runMode'] = 0
+        else:
+            state['runMode'] = 2
+        socketio.emit('state', state)
 
-        # Engage the charger
-        retStr = 'Engaging charger...'
-        text += retStr  + '\n'
-        socketio.emit('serialData', text)
-        cmdStr = generate_engage()
-        socketio.emit('cmdData', str(cmdStr))
-        result = execute_cmd(cmdStr, serial)
-        socketio.emit('stepDone', result)
+        # Final Correction
+        cmd = generate_move(X_OFFSET, 50, Z_OFFSET)
+        state['cmdStr'] = str(cmd)
+        socketio.emit('state', state)
+        state['cmdResponse'] = execute_cmd(cmd, serial, devMode)
+
+        # Charger engagement
+        retStr = 'Engaging charger...\n'
+        state['response'] += retStr
+        cmd = generate_move(0, 67, 0)
+        state['cmdStr'] = str(cmd)
+        socketio.emit('state', state)
+        state['cmdResponse'] = execute_cmd(cmd, serial, devMode)
+
+        retStr = 'Charger engaged!\n'
+        state['response'] += retStr
+        state['cmdStr'] = ''
+        state['status'] = 3
+        socketio.emit('state', state)
+        # cmd = generate_engage()
+        # state['cmdStr'] = str(cmd)
+        # socketio.emit('state', state)
+        # state['cmdResponse'] = execute_cmd(cmd, serial, devMode)
+        # if(state['cmdResponse'] == 1):
+        #     state['status'] = 0
+        # else:
+        #     state['status'] = 2
+        # socketio.emit('state', state)
 
 if __name__ == '__main__':
-    # Create hardware peripheral objects
-    cap = cv2.VideoCapture('/dev/camera')
+    if not devMode:
+        # Create hardware peripheral objects
+        cap = cv2.VideoCapture('/dev/camera')
 
-    # Initialize the motion coprocessor
-    serial = init_serial()
+        # Initialize the motion coprocessor
+        serial = init_serial()
 
-    # Load pre-trained models
-    print("Loading pre-trained model...")
-    detection_graph = load_graph()
-    sess = tf.Session(graph=detection_graph)
-    run_detect(cap, sess, 1)
-    print("Detection model loaded!")
+        # Load pre-trained models
+        print("Loading pre-trained model...")
+        detection_graph = load_graph()
+        sess = tf.Session(graph=detection_graph)
+        run_detect(cap, sess, 1)    # Run once to initialize graph
+        print("Detection model loaded!")
 
     # Start server
     socketio.start_background_task(run_server)

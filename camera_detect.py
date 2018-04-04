@@ -85,8 +85,6 @@ def get_loc_and_size(boxes, scores, width, height):
                 low = np.array((xmin, ymin))             # Bottom left coodinate array
                 high = np.array((xmax, ymax))            # Top right coordinate array
                 center = (high + low) / 2                   # Calculate the center point
-                # frame_size = np.array((width,height)).T
-                # center = np.multiply(center, frame_size)
                 apparentWidth = np.abs(xmax-xmin)     # Calculate the distance between high and low
                 return center, apparentWidth, ar_correct
             else:
@@ -108,6 +106,17 @@ def calc_real_size(apparent_size):
 
 def calc_corrections(center, d, w, h):
     return (center[0] - w/2) * d / FOCAL_DISTANCE, (center[1] - h/2) * d / FOCAL_DISTANCE
+
+def get_error_str(num):
+    retStr = '  REASON: '
+    if(num == -1):
+        return retStr + 'Could not open camera stream\n'
+    elif num == -2:
+        return retStr + 'Camera could not capture frame\n'
+    elif num == -3:
+        return retStr + 'Target was not detected in frame\n'
+    elif num == -4:
+        return retStr + 'Target location out of frame\n'
 
 def run_detect(cap, sess, avg_filter):
     dist = 0

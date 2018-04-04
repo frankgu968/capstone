@@ -34,14 +34,17 @@ def generate_LED(on):
          cmdStr = '{LOF}\n'
          return bytes(cmdStr, "utf")
 
-def execute_cmd(cmdStr, ser):
+def execute_cmd(cmdStr, ser, devMode):
+    if(devMode):
+        return 1
+
     ser.write(cmdStr)
 
     for i in range(25):
         try:
             time.sleep(0.01)
             result = ser.readline()
-            print(result)
+            # print(result)
             if result == b'{CPT}\n':
                 return 1
             elif result == b'{ERR}\n':
